@@ -60,7 +60,7 @@ namespace adiscope {
 
 	public:
 		explicit NetworkAnalyzer(struct iio_context *ctx, Filter *filt,
-				std::shared_ptr<GenericAdc> adc_dev,
+				std::shared_ptr<GenericAdc> &adc_dev,
 				QPushButton *runButton, QJSEngine *engine,
 				ToolLauncher *parent);
 		~NetworkAnalyzer();
@@ -87,6 +87,7 @@ namespace adiscope {
         PositionSpinButton *magMin;
         PositionSpinButton *phaseMax;
         PositionSpinButton *phaseMin;
+	void setMinimumDistanceBetween(SpinBoxA *min, SpinBoxA *max, double distance);
 
         HorizHandlesArea *d_bottomHandlesArea;
 

@@ -223,10 +223,14 @@ TimeDomainDisplayPlot::TimeDomainDisplayPlot(QWidget* parent, unsigned int xNumD
 
 TimeDomainDisplayPlot::~TimeDomainDisplayPlot()
 {
-	for (int i = 0; i < d_sinkManager.sinkListLength(); i++) {
-		Sink *sink = d_sinkManager.sink(i);
+	while (d_sinkManager.sinkListLength()) {
+		Sink *sink = d_sinkManager.sink(0);
 		unregisterSink(sink->name());
 	}
+
+	//TODO: prob remove d_trigger_lines -> not used.
+	delete d_trigger_lines[0];
+	delete d_trigger_lines[1];
 
   // d_zoomer and _panner deleted when parent deleted
 }
@@ -238,8 +242,8 @@ TimeDomainDisplayPlot::replot()
 }
 
 void
-TimeDomainDisplayPlot::plotNewData(const std::string sender,
-				   const std::vector<double*> dataPoints,
+TimeDomainDisplayPlot::plotNewData(const std::string &sender,
+				   const std::vector<double*> &dataPoints,
 				   const int64_t numDataPoints,
 				   const double timeInterval,
 				   const std::vector< std::vector<gr::tag_t> > &tags)
@@ -938,6 +942,7 @@ void TimeDomainDisplayPlot::unregisterReferenceWaveform(QString name)
 	}
 	cleanUpJustBeforeChannelRemoval(i);
 
+	delete[] d_ref_ydata[pos];
 	d_ref_ydata.erase(d_ref_ydata.begin() + pos);
 	curve->detach();
 	delete curve;

@@ -129,6 +129,7 @@ SpinBoxA::~SpinBoxA()
 
 	m_sba_api->save(*m_settings);
 	delete m_sba_api;
+	delete m_settings;
 	delete ui;
 }
 
@@ -406,6 +407,8 @@ bool SpinBoxA::eventFilter(QObject *obj, QEvent *event)
 				stepDown();
 				return true;
 			}
+		} else if (event->type() == QEvent::FocusOut) {
+			setValue(m_value);
 		}
 	}
 
@@ -771,13 +774,15 @@ void PhaseSpinButton::setValue(double value)
 		}
 	}
 
-	int index;
-	auto scale = inSeconds() ? findUnitOfValue(value, &index)
-	             : m_units.at(ui->SBA_Combobox->currentIndex()).second;
 	double period = 360;
+	double scale;
 
 	if (inSeconds()) {
+		int index;
+		scale = findUnitOfValue(value, &index);
 		value = computeSecondsTransformation(scale, index, value);
+	} else {
+		scale = m_units.at(ui->SBA_Combobox->currentIndex()).second;
 	}
 
 	// Update line edit

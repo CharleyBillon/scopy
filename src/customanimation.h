@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Analog Devices, Inc.
+ * Copyright 2018 Analog Devices, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,33 +17,27 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef SIGNAL_SAMPLE_HPP
-#define SIGNAL_SAMPLE_HPP
+#ifndef CUSTOMANIMATION_H
+#define CUSTOMANIMATION_H
 
-#include <vector>
-
-#include <QObject>
-
-#include <gnuradio/sync_block.h>
-
-Q_DECLARE_METATYPE(std::vector<float>);
+#include <QPropertyAnimation>
 
 namespace adiscope {
-	class signal_sample : public QObject, public gr::sync_block
-	{
-		Q_OBJECT
+class CustomAnimation : public QPropertyAnimation
+{
+public:
+	CustomAnimation(QObject *target = nullptr);
+	CustomAnimation(QObject *target, const QByteArray &propertyName, QObject *parent = nullptr);
+	~CustomAnimation();
 
-	public:
-		explicit signal_sample();
-		~signal_sample();
+        void setDuration(int msec);
 
-		int work(int noutput_items,
-				gr_vector_const_void_star &input_items,
-				gr_vector_void_star &output_items);
+public Q_SLOTS:
+        void toggle(bool);
 
-	Q_SIGNALS:
-		void triggered(const std::vector<float> &values);
-	};
+private:
+        bool m_enabled;
+        int m_duration;
+};
 }
-
-#endif
+#endif // CUSTOMANIMATION_H

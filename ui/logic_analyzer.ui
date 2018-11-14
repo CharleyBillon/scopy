@@ -16,6 +16,12 @@
     <verstretch>0</verstretch>
    </sizepolicy>
   </property>
+  <property name="minimumSize">
+   <size>
+    <width>1280</width>
+    <height>0</height>
+   </size>
+  </property>
   <property name="focusPolicy">
    <enum>Qt::NoFocus</enum>
   </property>
@@ -695,7 +701,7 @@ QPushButton:checked:hover {
             <number>0</number>
            </property>
            <item>
-            <widget class="QPushButton" name="btnSettings">
+            <widget class="adiscope::CustomPushButton" name="btnSettings">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -744,7 +750,7 @@ QPushButton:checked:hover {
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="btnChSettings">
+            <widget class="adiscope::CustomPushButton" name="btnChSettings">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -946,13 +952,13 @@ background-color: qlineargradient(spread:pad, x1:0.9, y1:0, x2:0, y2:0, stop:0 r
                        <number>0</number>
                       </property>
                       <property name="leftMargin">
-                       <number>0</number>
+                       <number>10</number>
                       </property>
                       <property name="topMargin">
                        <number>5</number>
                       </property>
                       <property name="rightMargin">
-                       <number>20</number>
+                       <number>10</number>
                       </property>
                       <property name="bottomMargin">
                        <number>5</number>
@@ -1507,8 +1513,8 @@ background-color: qlineargradient(spread:pad, x1:0.6, y1:0, x2:0, y2:0, stop:0 r
                     <rect>
                      <x>0</x>
                      <y>0</y>
-                     <width>180</width>
-                     <height>571</height>
+                     <width>187</width>
+                     <height>569</height>
                     </rect>
                    </property>
                    <layout class="QVBoxLayout" name="verticalLayout_7">
@@ -1952,7 +1958,7 @@ QLabel {
          </spacer>
         </item>
         <item>
-         <widget class="QPushButton" name="btnTrigger">
+         <widget class="adiscope::CustomPushButton" name="btnTrigger">
           <property name="styleSheet">
            <string notr="true">QPushButton {
   width: 40px;
@@ -1997,6 +2003,11 @@ QPushButton:checked { border-image: url(:/icons/setup_btn_checked.svg); }
    <class>adiscope::SmallOnOffSwitch</class>
    <extends>QPushButton</extends>
    <header>smallOnOffSwitch.hpp</header>
+  </customwidget>
+  <customwidget>
+   <class>adiscope::CustomPushButton</class>
+   <extends>QPushButton</extends>
+   <header>customPushButton.hpp</header>
   </customwidget>
  </customwidgets>
  <resources>

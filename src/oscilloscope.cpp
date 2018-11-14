@@ -39,6 +39,7 @@
 #include <QComboBox>
 
 /* Local includes */
+#include "logging_categories.h"
 #include "adc_sample_conv.hpp"
 #include "customPushButton.hpp"
 #include "oscilloscope.hpp"
@@ -118,7 +119,10 @@ Oscilloscope::Oscilloscope(struct iio_context *ctx, Filter *filt,
 	lastFunctionValid(false),
 	import_error(""),
 	hCursorsEnabled(true),
-	vCursorsEnabled(true)
+	vCursorsEnabled(true),
+	horiz_offset(0),
+	reset_horiz_offset(true),
+	wheelEventGuard(nullptr)
 {
 	ui->setupUi(this);
 	int triggers_panel = ui->stackedWidget->insertWidget(-1, &trigger_settings);
@@ -172,7 +176,7 @@ Oscilloscope::Oscilloscope(struct iio_context *ctx, Filter *filt,
 	iio = iio_manager::get_instance(ctx,
 			filt->device_name(TOOL_OSCILLOSCOPE));
 	gr::hier_block2_sptr hier = iio->to_hier_block2();
-	qDebug() << "Manager created:\n" << gr::dot_graph(hier).c_str();
+	qDebug(CAT_OSCILLOSCOPE) << "Manager created:\n" << gr::dot_graph(hier).c_str();
 
 	auto adc_channels = adc->adcChannelList();
 	for (unsigned int i = 0; i < adc_channels.size(); i++) {
@@ -598,9 +602,15 @@ Oscilloscope::Oscilloscope(struct iio_context *ctx, Filter *filt,
 			double value = probe_attenuation[i] * plot.VertUnitsPerDiv(i);
 			label->setText(vertMeasureFormat.format(value, "V/div", 3));
 		}
-		if (isZoomOut) {
-			updateGainMode();
+
+		if (zoom_level == 0) {
+			onTimePositionChanged(timePosition->value());
 		}
+
+		updateBufferPreviewer();
+		horiz_offset = plot.HorizOffset();
+		time_trigger_offset = horiz_offset;
+
 	});
 
 	connect(ch_ui->probe_attenuation, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -629,6 +639,8 @@ Oscilloscope::Oscilloscope(struct iio_context *ctx, Filter *filt,
 		onTriggerSourceChanged(trigger_settings.currentChannel());
 
 	});
+
+	init_buffer_scrolling();
 
 	export_settings_init();
 	cursor_panel_init();
@@ -687,7 +699,43 @@ Oscilloscope::Oscilloscope(struct iio_context *ctx, Filter *filt,
 		ui->btnTrigger->setChecked(false);
 	}
 
+	connect(this, &Tool::detachedState,
+		this, &Oscilloscope::toolDetached);
+	min_detached_width = this->minimumWidth();
+	toolDetached(false);
 }
+
+void Oscilloscope::init_buffer_scrolling()
+{
+	connect(&plot, &CapturePlot::canvasSizeChanged, [=](){
+		buffer_previewer->setFixedWidth(plot.width());
+	});
+	connect(buffer_previewer, &BufferPreviewer::bufferMovedBy, [=](int value) {
+		reset_horiz_offset = false;
+		double moveTo = 0.0;
+		double min = plot.Curve(0)->sample(0).x();
+		double max = plot.Curve(0)->sample(plot.Curve(0)->data()->size() - 1).x();
+		int width = buffer_previewer->width();
+		QwtInterval xBot = plot.axisInterval(QwtPlot::xBottom);
+		double xAxisWidth = max - min;
+
+		moveTo = value * xAxisWidth / width;
+		plot.setHorizOffset(moveTo + horiz_offset);
+		plot.replot();
+		updateBufferPreviewer();
+	});
+	connect(buffer_previewer, &BufferPreviewer::bufferStopDrag, [=](){
+		horiz_offset = plot.HorizOffset();
+		reset_horiz_offset = true;
+	});
+	connect(buffer_previewer, &BufferPreviewer::bufferResetPosition, [=](){
+		plot.setHorizOffset(time_trigger_offset);
+		plot.replot();
+		updateBufferPreviewer();
+		horiz_offset = time_trigger_offset;
+	});
+}
+
 
 void Oscilloscope::init_selected_measurements(int chnIdx,
 					      std::vector<int> measureIdx)
@@ -859,22 +907,30 @@ Oscilloscope::~Oscilloscope()
 		iio->unlock();
 
 	gr::hier_block2_sptr hier = iio->to_hier_block2();
-	qDebug() << "OSC disconnected:\n" << gr::dot_graph(hier).c_str();
+	qDebug(CAT_OSCILLOSCOPE) << "OSC disconnected:\n" << gr::dot_graph(hier).c_str();
 
 	if (saveOnExit) {
 		api->save(*settings);
 	}
 	delete api;
 
+	for (auto it = channels_api.begin(); it != channels_api.end(); ++it) {
+		delete *it;
+	}
+
+	delete math_pair;
+
 	filterBlocks.clear();
 	subBlocks.clear();
 	delete[] hist_ids;
 	delete[] fft_ids;
 	delete[] ids;
+	delete autoset_id;
 	delete ch_ui;
 	delete gsettings_ui;
 	delete measure_panel_ui;
 	delete cursor_readouts_ui;
+	delete statistics_panel_ui;
 	delete cr_ui;
 	delete ui;
 }
@@ -1215,6 +1271,19 @@ void Oscilloscope::toggleCursorsMode(bool toggled)
 
 	cr_ui->btnLockVertical->setEnabled(toggled);
 	plot.trackModeEnabled(toggled);
+}
+
+void Oscilloscope::toolDetached(bool detached)
+{
+	if (detached) {
+		this->setMinimumWidth(min_detached_width);
+		this->setSizePolicy(QSizePolicy::Preferred,
+				    QSizePolicy::MinimumExpanding);
+	} else {
+		this->setMinimumWidth(0);
+		this->setSizePolicy(QSizePolicy::MinimumExpanding,
+				    QSizePolicy::MinimumExpanding);
+	}
 }
 
 void Oscilloscope::pause(bool paused)
@@ -2250,6 +2319,7 @@ void Oscilloscope::onTriggerSourceChanged(int chnIdx)
 		deactivateAcCouplingTrigger();
 		activateAcCouplingTrigger(chnIdx);
 	}
+	plot.replot();
 
 }
 
@@ -2688,9 +2758,14 @@ void adiscope::Oscilloscope::onHorizScaleValueChanged(double value)
 
 void adiscope::Oscilloscope::onVertOffsetValueChanged(double value)
 {
+	cancelZoom();
+
 	if (value != -plot.VertOffset(current_ch_widget)) {
 		plot.setVertOffset(-value, current_ch_widget);
 		plot.replot();
+	}
+	if (zoom_level == 0) {
+		plot.zoomBaseUpdate();
 	}
 
 	// Switch between high and low gain modes only for the M2K channels
@@ -2698,7 +2773,10 @@ void adiscope::Oscilloscope::onVertOffsetValueChanged(double value)
 		if (ui->pushButtonRunStop->isChecked())
 			toggle_blockchain_flow(false);
 
-		updateGainMode();
+		if (zoom_level == 0) {
+			// Only change gain mode when the plot is not zoomed
+			updateGainMode();
+		}
 		setChannelHwOffset(current_ch_widget, value);
 
 		trigger_settings.updateHwVoltLevels(current_ch_widget);
@@ -2710,6 +2788,8 @@ void adiscope::Oscilloscope::onVertOffsetValueChanged(double value)
 
 void adiscope::Oscilloscope::onTimePositionChanged(double value)
 {
+	cancelZoom();
+
 	bool started = iio->started();
 	bool enhancedMemDepth = symmBufferMode->isEnhancedMemDepth();
 
@@ -2740,6 +2820,7 @@ void adiscope::Oscilloscope::onTimePositionChanged(double value)
 
 	// Realign plot data based on the new time position
 	plot.setHorizOffset(value);
+	time_trigger_offset = value;
 
 	plot.setXAxisNumPoints(plot_samples_sequentially ? active_plot_sample_count : 0);
 	plot.realignReferenceWaveforms(timeBase->value(), timePosition->value());
@@ -2755,6 +2836,9 @@ void adiscope::Oscilloscope::onTimePositionChanged(double value)
 		last_set_time_pos = active_time_pos;
 	}
 	updateBufferPreviewer();
+	if (reset_horiz_offset) {
+		horiz_offset = value;
+	}
 
 	if (active_sample_rate == adc->sampleRate() &&
 			(active_plot_sample_count == oldSampleCount))
@@ -2919,7 +3003,9 @@ void Oscilloscope::update_chn_settings_panel(int id)
 	voltsPerDiv->setValue(plot.VertUnitsPerDiv(id));
 	connect(voltsPerDiv, SIGNAL(valueChanged(double)),
 		SLOT(onVertScaleValueChanged(double)));
+	voltsPosition->blockSignals(true);
 	voltsPosition->setValue(-plot.VertOffset(id));
+	voltsPosition->blockSignals(false);
 
 	QString name = chn_widget->fullName();
 	ch_ui->label_channelName->setText(name);
@@ -3676,7 +3762,7 @@ void Oscilloscope::periodicFlowRestart(bool force)
 		t.start();
 		iio->lock();
 		iio->unlock();
-		qDebug()<<"Restarted flow @ " << QTime::currentTime().toString("hh:mm:ss") <<"restart took " << t.elapsed() << "ms";
+		qDebug(CAT_OSCILLOSCOPE)<<"Restarted flow @ " << QTime::currentTime().toString("hh:mm:ss") <<"restart took " << t.elapsed() << "ms";
 	}
 	restartFlowCounter--;
 }
@@ -3915,14 +4001,16 @@ void Oscilloscope::updateGainMode()
 		return;
 	}
 
-	QwtInterval hw_input_itv(-2.5, 2.5);
+	double offset = plot.VertOffset(current_ch_widget);
+	QwtInterval hw_input_itv(-2.5 + offset, 2.5 + offset);
 	QwtInterval plot_vert_itv = plot.axisScaleDiv(
 		QwtAxisId(QwtPlot::yLeft, current_ch_widget)).interval();
 
 	// If max signal span that can be captured is smaller than the plot
 	// screen try to increase the range (switch to low gain mode)
 	if (plot_vert_itv.minValue() < hw_input_itv.minValue() ||
-		plot_vert_itv.maxValue() > hw_input_itv.maxValue()) {
+		plot_vert_itv.maxValue() > hw_input_itv.maxValue() ||
+			std::abs(offset) > 5.0) {
 		if (high_gain_modes[current_ch_widget]) {
 			high_gain_modes[current_ch_widget] = false;
 			bool running = ui->pushButtonRunStop->isChecked();

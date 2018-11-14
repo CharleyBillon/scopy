@@ -17,6 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#include "logging_categories.h"
 #include "dynamicWidget.hpp"
 #include "network_analyzer.hpp"
 #include "signal_generator.hpp"
@@ -63,14 +64,15 @@ using namespace adiscope;
 using namespace gr;
 
 NetworkAnalyzer::NetworkAnalyzer(struct iio_context *ctx, Filter *filt,
-		std::shared_ptr<GenericAdc> adc_dev,
+		std::shared_ptr<GenericAdc> &adc_dev,
 		QPushButton *runButton, QJSEngine *engine,
 		ToolLauncher *parent) :
 	Tool(ctx, runButton, new NetworkAnalyzer_API(this), "Network Analyzer", parent),
 	ui(new Ui::NetworkAnalyzer),
 	adc_dev(adc_dev),
 	d_cursorsEnabled(false),
-	stop(true), amp1(nullptr), amp2(nullptr)
+	stop(true), amp1(nullptr), amp2(nullptr),
+	wheelEventGuard(nullptr)
 {
 	iio = iio_manager::get_instance(ctx,
 			filt->device_name(TOOL_NETWORK_ANALYZER, 2));
@@ -203,18 +205,9 @@ NetworkAnalyzer::NetworkAnalyzer(struct iio_context *ctx, Filter *filt,
     ui->phaseMaxLayout->addWidget(phaseMax);
     ui->phaseMinLayout->addWidget(phaseMin);
 
-    connect(magMax, &PositionSpinButton::valueChanged,
-            magMin, &PositionSpinButton::setMaxValue);
-    connect(magMin, &PositionSpinButton::valueChanged,
-            magMax, &PositionSpinButton::setMinValue);
-    connect(phaseMax, &PositionSpinButton::valueChanged,
-            phaseMin, &PositionSpinButton::setMaxValue);
-    connect(phaseMin, &PositionSpinButton::valueChanged,
-            phaseMax, &PositionSpinButton::setMinValue);
-    connect(minFreq, &ScaleSpinButton::valueChanged,
-            maxFreq, &ScaleSpinButton::setMinValue);
-    connect(maxFreq, &ScaleSpinButton::valueChanged,
-            minFreq, &ScaleSpinButton::setMaxValue);
+    setMinimumDistanceBetween(magMin, magMax, 1);
+    setMinimumDistanceBetween(phaseMin, phaseMax, 1);
+    setMinimumDistanceBetween(minFreq, maxFreq, 0);
 
     connect(magMax, &PositionSpinButton::valueChanged,
             ui->xygraph, &NyquistGraph::setMax);
@@ -297,6 +290,8 @@ NetworkAnalyzer::NetworkAnalyzer(struct iio_context *ctx, Filter *filt,
     connect(ui->boxCursors,SIGNAL(toggled(bool)),
             SLOT(toggleCursors(bool)));
 
+	connect(ui->cmb_graphs,SIGNAL(currentIndexChanged(int)),SLOT(onGraphIndexChanged(int)));
+
     readPreferences();
 
 	api->setObjectName(QString::fromStdString(Filter::tool_name(
@@ -313,7 +308,6 @@ NetworkAnalyzer::NetworkAnalyzer(struct iio_context *ctx, Filter *filt,
     connect(&m_dBgraph,SIGNAL(resetZoom()),&m_phaseGraph,SLOT(onResetZoom()));
     connect(&m_phaseGraph,SIGNAL(resetZoom()),&m_dBgraph,SLOT(onResetZoom()));
 
-    connect(ui->cmb_graphs,SIGNAL(currentIndexChanged(int)),SLOT(onGraphIndexChanged(int)));
 
     connect(ui->rightMenu, &MenuAnim::finished, this, &NetworkAnalyzer::rightMenuFinished);
 
@@ -378,6 +372,19 @@ NetworkAnalyzer::~NetworkAnalyzer()
 	delete api;
 
 	delete ui;
+}
+
+void NetworkAnalyzer::setMinimumDistanceBetween(SpinBoxA *min, SpinBoxA *max, double distance)
+{
+
+	connect(max, &SpinBoxA::valueChanged, [=](double value) {
+	    min->setMaxValue(value - distance);
+	    min->setValue(min->value());
+	});
+	connect(min, &SpinBoxA::valueChanged, [=](double value) {
+	    max->setMinValue(value + distance);
+	    max->setValue(max->value());
+	});
 }
 
 void NetworkAnalyzer::triggerRightMenuToggle(CustomPushButton *btn, bool checked)
@@ -456,8 +463,8 @@ void NetworkAnalyzer::updateNumSamples()
 
 	unsigned int num_samples = (unsigned int) samplesCount->value();
 
-    m_dBgraph.setNumSamples(num_samples);
-    m_phaseGraph.setNumSamples(num_samples);
+	m_dBgraph.setNumSamples(num_samples);
+	m_phaseGraph.setNumSamples(num_samples);
 	ui->xygraph->setNumSamples(num_samples);
 	ui->nicholsgraph->setNumSamples(num_samples);
 }
@@ -509,7 +516,7 @@ void NetworkAnalyzer::run()
 	double log10_max_freq = log10(max_freq);
 	double step;
 
-    bool is_log = ui->btnIsLog->isChecked();
+bool is_log = ui->btnIsLog->isChecked();
 	if (is_log)
 		step = (log10_max_freq - log10_min_freq) / (double)(steps - 1);
 	else
@@ -558,8 +565,7 @@ void NetworkAnalyzer::run()
 		}
 
 		adc_rate = get_best_sample_rate(adc, frequency);
-		iio_device_attr_write_longlong(adc,
-				"sampling_frequency", adc_rate);
+		adc_dev->setSampleRate(adc_rate);
 
 		/* Lock the flowgraph if we are already started */
 		bool started = iio->started();
@@ -569,7 +575,7 @@ void NetworkAnalyzer::run()
 		size_t buffer_size = get_sin_samples_count(
 				adc, adc_rate, frequency);
 		if(buffer_size == 0) {
-			qDebug() << "Network analyzer buffer size 0";
+			qDebug(CAT_NETWORK_ANALYZER) << "buffer size 0";
 			return;
 		}
 
@@ -679,7 +685,7 @@ void NetworkAnalyzer::run()
 			mag = 10.0 * log10(mag1) - 10.0 * log10(mag2);
 		}
 
-		qDebug() << "Frequency" << frequency << "Hz," <<
+		qDebug(CAT_NETWORK_ANALYZER) << "Frequency" << frequency << "Hz," <<
 			adc_rate << "SPS," << buffer_size << "samples," <<
 			mag << "Mag," << phase << "Deg";
 
@@ -754,7 +760,7 @@ void NetworkAnalyzer::startStop(bool pressed)
 size_t NetworkAnalyzer::get_sin_samples_count(const struct iio_device *dev,
 		unsigned long rate, double frequency)
 {
-	size_t max_buffer_size = 4 * 1024 * 1024 /
+	size_t max_buffer_size = 128 * 1024 /
 		(size_t) iio_device_get_sample_size(dev);
 	double ratio = (double) rate / frequency;
 	size_t size;
@@ -794,7 +800,7 @@ unsigned long NetworkAnalyzer::get_best_sample_rate(
 		if (buf_size)
 			return rate;
 
-		qDebug() << QString("Rate %1 too high, trying lower")
+		qDebug(CAT_NETWORK_ANALYZER) << QString("Rate %1 too high, trying lower")
 			.arg(rate);
 	}
 

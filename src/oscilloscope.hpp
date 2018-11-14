@@ -213,6 +213,7 @@ namespace adiscope {
 		void onFilledScreen(bool, unsigned int);
 
 		void toggleCursorsMode(bool toggled);
+		void toolDetached(bool);
 	public Q_SLOTS:
 		void requestAutoset();
 		void enableLabels(bool);
@@ -235,6 +236,10 @@ namespace adiscope {
 		unsigned long last_set_sample_count;
 		int zoom_level;
 		bool plot_samples_sequentially, d_displayOneBuffer, d_shouldResetStreaming;
+		double horiz_offset;
+		bool reset_horiz_offset;
+		double time_trigger_offset;
+		int min_detached_width;
 
 		int autosetMaxIndexAmpl;
 		int autosetFFTIndex;
@@ -420,6 +425,7 @@ namespace adiscope {
 		void clearMathChannels();
 		void add_ref_waveform(unsigned int chIdx);
 		void init_selected_measurements(int, std::vector<int>);
+		void init_buffer_scrolling();
 	};
 }
 #endif /* M2K_OSCILLOSCOPE_H */

@@ -65,7 +65,7 @@ string Pattern::get_name()
 	return name;
 }
 
-void Pattern::set_name(string name_)
+void Pattern::set_name(const string &name_)
 {
 	name = name_;
 }
@@ -75,7 +75,7 @@ string Pattern::get_description()
 	return description;
 }
 
-void Pattern::set_description(string description_)
+void Pattern::set_description(const string &description_)
 {
 	description = description_;
 }
@@ -108,7 +108,7 @@ short *Pattern::get_buffer()
 void Pattern::delete_buffer()
 {
 	if (buffer) {
-		delete buffer;
+		delete[] buffer;
 	}
 
 	buffer=nullptr;
@@ -1169,7 +1169,7 @@ enum UARTPattern::sp_parity UARTPattern::get_parity()
 	return parity;
 }
 
-void UARTPattern::set_string(std::string str_)
+void UARTPattern::set_string(const std::string &str_)
 {
 	str = str_;
 }
@@ -1300,6 +1300,9 @@ uint16_t UARTPattern::encapsulateUartFrame(char chr, uint16_t *bits_per_frame)
 		parity_bit_available = true;
 		parity_bit_value = 0;
 		break;
+
+	case SP_PARITY_INVALID:
+		qDebug() << "Invalid parity setting detected";
 	}
 
 	if (!msb_first) {
@@ -3135,13 +3138,14 @@ void ImportPattern::setFrequency(float value)
 	frequency = value;
 }
 
-ImportPattern::ImportPattern()
+ImportPattern::ImportPattern():
+	fileName(""),
+	channel_mapping(0)
 {
 	set_name("Import");
 	set_description("Import pattern");
 	set_periodic(false);
 	set_frequency(5000);
-	fileName = "";
 }
 
 ImportPattern::~ImportPattern()

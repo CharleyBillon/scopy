@@ -59,10 +59,17 @@ const QPen& PlotLineHandle::pen()
 	return m_pen;
 }
 
+void PlotLineHandle::enterEvent(QEvent *event)
+{
+	setCursor(Qt::OpenHandCursor);
+	QWidget::enterEvent(event);
+}
+
 void PlotLineHandle::mousePressEvent(QMouseEvent *event)
 {
 	QWidget *parent = static_cast<QWidget *>(this->parent());
 
+	setCursor(Qt::ClosedHandCursor);
 	parent->raise();
 
 	QWidget::mousePressEvent(event);
@@ -71,7 +78,7 @@ void PlotLineHandle::mousePressEvent(QMouseEvent *event)
 void PlotLineHandle::mouseReleaseEvent(QMouseEvent *event)
 {
 	Q_EMIT mouseReleased();
-
+	setCursor(Qt::OpenHandCursor);
 	QWidget::mouseReleaseEvent(event);
 }
 
@@ -186,6 +193,8 @@ void PlotLineHandleH::mouseDoubleClickEvent(QMouseEvent *event)
 	HorizHandlesArea *area = static_cast<HorizHandlesArea *>(parent());
 	int center = (area->width() - area->leftPadding() - area->rightPadding()) / 2;
 	setPosition(center);
+
+	Q_EMIT reset();
 }
 
 PlotLineHandleV::PlotLineHandleV(const QPixmap &handleIcon, QWidget *parent,
@@ -284,6 +293,8 @@ void PlotLineHandleV::mouseDoubleClickEvent(QMouseEvent *event)
 	VertHandlesArea *area = static_cast<VertHandlesArea *>(parent());
 	int center = (area->height() - area->topPadding() - area->bottomPadding()) / 2;
 	setPosition(center);
+
+	Q_EMIT reset();
 }
 
 

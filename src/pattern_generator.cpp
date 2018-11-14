@@ -54,6 +54,7 @@
 #include <libsigrokcxx/libsigrokcxx.hpp>
 #include <libsigrokdecode/libsigrokdecode.h>
 
+#include "logging_categories.h"
 #include "filter.hpp"
 #include "pattern_generator.hpp"
 #include "dynamicWidget.hpp"
@@ -151,7 +152,8 @@ PatternGenerator::PatternGenerator(struct iio_context *ctx, Filter *filt,
 	pgSettings(new Ui::PGSettings),
 	cgSettings(new Ui::PGCGSettings),
 	txbuf(0), buffer_created(0), currentUI(nullptr), offline_mode(offline_mode_),
-	diom(diom), suppressCGSettingsUpdate(false), no_channels(16), selected_channel_group(0), dev(nullptr)
+	diom(diom), suppressCGSettingsUpdate(false), no_channels(16), selected_channel_group(0), dev(nullptr),
+	wheelEventGuard(nullptr)
 {
 	// IIO
 	if (!offline_mode) {
@@ -294,6 +296,11 @@ PatternGenerator::PatternGenerator(struct iio_context *ctx, Filter *filt,
 	setPGStatus(STOPPED);
 	settingsLoaded();
 
+	if (!wheelEventGuard) {
+		wheelEventGuard = new MouseWheelWidgetGuard(ui->plotWidget);
+	}
+	wheelEventGuard->installEventRecursively(ui->plotWidget);
+
 }
 
 PatternGenerator::~PatternGenerator()
@@ -312,6 +319,10 @@ PatternGenerator::~PatternGenerator()
 	}
 	delete api;
 
+	delete singleRunTimer;
+
+	delete cgSettings;
+	delete pgSettings;
 	delete ui;
 	delete bufman;
 	srd_exit();
@@ -617,6 +628,8 @@ void PatternGenerator::createSettingsWidget()
 	currentUI->post_load_ui();
 	currentUI->setVisible(true);
 
+
+
 	connect(currentUI,SIGNAL(decoderChanged()),chmui,SLOT(triggerUpdateUiNoSettings()));
 
 	if (chg->is_enabled()) {
@@ -849,32 +862,32 @@ bool PatternGenerator::startPatternGeneration(bool cyclic)
 	setPGStatus(CONFIG);
 
 	if (!dev) {
-		qDebug("Devices not found");
+		qDebug(CAT_PATTERN_GENERATOR) << "Devices not found";
 		return false;
 	}
 
-	qDebug("Enabling channels");
+	qDebug(CAT_PATTERN_GENERATOR) << "Enabling channels";
 
 	for (int j = 0; j < no_channels; j++) {
 		if (chm.get_enabled_mask() & (1<<j)) {
-			qDebug()<<"enabled channel - "<<j<<"\n";
+			qDebug(CAT_PATTERN_GENERATOR)<<"enabled channel - "<<j<<"\n";
 			auto ch = iio_device_find_channel(dev, channelNames[j], true);
 			iio_channel_enable(ch);
 		}
 	}
 
-	qDebug("Setting channel direction");
+	qDebug(CAT_PATTERN_GENERATOR) << "Setting channel direction";
 	diom->setMode(chm.get_mode_mask());
 
-	qDebug("Setting sample rate");
+	qDebug(CAT_PATTERN_GENERATOR) << "Setting sample rate";
 	iio_device_attr_write(dev, "sampling_frequency",
 	                      std::to_string(bufman->getSampleRate()).c_str());
 
-	qDebug("Creating buffer");
+	qDebug(CAT_PATTERN_GENERATOR) << "Creating buffer";
 	txbuf = iio_device_create_buffer(dev, bufman->getBufferSize(), cyclic);
 
 	if (!txbuf) {
-		qDebug("Could not create buffer - errno: %d - %s", errno, strerror(errno));
+		qDebug(CAT_PATTERN_GENERATOR) << QString("Could not create buffer - errno: %1 - %2").arg(errno).arg(strerror(errno));
 		return false;
 	}
 
@@ -893,7 +906,7 @@ bool PatternGenerator::startPatternGeneration(bool cyclic)
 
 	/* Push buffer       */
 	auto number_of_bytes = iio_buffer_push(txbuf);
-	qDebug("\nPushed %ld bytes to devices\r\n",number_of_bytes);
+	qDebug(CAT_PATTERN_GENERATOR) << QString("\nPushed %1 bytes to devices\r\n").arg(number_of_bytes);
 	setPGStatus(RUNNING);
 	return true;
 }
@@ -935,7 +948,7 @@ void PatternGenerator::startStop(bool start)
 		if (startPatternGeneration(true)) {
 			setPGStatus(RUNNING);
 		} else {
-			qDebug("Pattern generation failed");
+			qDebug(CAT_PATTERN_GENERATOR) << "Pattern generation failed";
 			setPGStatus(WAITING);
 		}
 	} else {
@@ -955,15 +968,15 @@ void PatternGenerator::singleRun()
 		uint32_t time_until_buffer_destroy = 500 + (uint32_t)(((
 		                bufman->getBufferSize()/2)/((
 		                                float)bufman->getSampleRate()))*1000.0);
-		qDebug("Time until buffer destroy %d", time_until_buffer_destroy);
+		qDebug(CAT_PATTERN_GENERATOR) << QString("Time until buffer destroy %1").arg(time_until_buffer_destroy);
 
 		singleRunTimer->setInterval(time_until_buffer_destroy);
 		singleRunTimer->start();
 
-		qDebug("Pattern generation single started");
+		qDebug(CAT_PATTERN_GENERATOR) << "Pattern generation single started";
 		ui->btnSingleRun->setChecked(false);
 	} else {
-		qDebug("Pattern generation failed");
+		qDebug(CAT_PATTERN_GENERATOR) << "Pattern generation failed";
 		ui->btnSingleRun->setChecked(true);
 		setPGStatus(STOPPED);
 	}
@@ -971,7 +984,7 @@ void PatternGenerator::singleRun()
 
 void PatternGenerator::singleRunStop()
 {
-	qDebug("Pattern Generation stopped ");
+	qDebug(CAT_PATTERN_GENERATOR) << "Pattern Generation stopped ";
 	stopPatternGeneration();
 	ui->btnSingleRun->setChecked(false);
 }
@@ -1022,10 +1035,10 @@ void PatternGenerator::fromString(QString val)
 		if (doc.isObject()) {
 			obj = doc.object();
 		} else {
-			qDebug() << "Document is not an object" << endl;
+			qDebug(CAT_PATTERN_GENERATOR) << "Document is not an object" << endl;
 		}
 	} else {
-		qDebug() << "Invalid JSON...\n";
+		qDebug(CAT_PATTERN_GENERATOR) << "Invalid JSON...\n";
 	}
 
 	jsonToChm(obj);

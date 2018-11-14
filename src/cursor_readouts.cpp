@@ -49,12 +49,14 @@ CursorReadouts::CursorReadouts(QwtPlot *plot):
 	ui->TimeCursors->setAttribute(Qt::WA_TransparentForMouseEvents);
 	ui->VoltageCursors->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-	anim = new QPropertyAnimation(ui->VoltageCursors, "geometry");
-	anim2 = new QPropertyAnimation(ui->TimeCursors, "geometry");
+	anim = new CustomAnimation(ui->VoltageCursors, "geometry");
+	anim2 = new CustomAnimation(ui->TimeCursors, "geometry");
 }
 
 CursorReadouts::~CursorReadouts()
 {
+	delete anim;
+	delete anim2;
 	delete ui;
 }
 

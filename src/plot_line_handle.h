@@ -45,8 +45,10 @@ Q_SIGNALS:
 	void positionChanged(int);
 	void grabbedChanged(bool);
 	void mouseReleased();
+	void reset();
 
 protected:
+	void enterEvent(QEvent *event);
 	void mousePressEvent(QMouseEvent *event);
 	void mouseReleaseEvent(QMouseEvent *event);
 

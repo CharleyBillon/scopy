@@ -34,6 +34,7 @@
 #include <QCheckBox>
 
 /* Local includes */
+#include "logging_categories.h"
 #include "spectrum_analyzer.hpp"
 #include "filter.hpp"
 #include "math.hpp"
@@ -229,8 +230,6 @@ SpectrumAnalyzer::SpectrumAnalyzer(struct iio_context *ctx, Filter *filt,
 		ch_api.append(new SpectrumChannel_API(this,channel));
 	}
 
-	channels_group->setExclusive(true);
-
 	if (num_adc_channels > 0)
 		channels[crt_channel_id]->widget()->nameButton()->
 		setChecked(true);
@@ -287,6 +286,7 @@ SpectrumAnalyzer::SpectrumAnalyzer(struct iio_context *ctx, Filter *filt,
 	stop_freq->setMaxValue(max_sr);
 	center_freq->setMaxValue(max_sr);
 	span_freq->setMaxValue(max_sr);
+	span_freq->setMinValue(1);
 
 	start_freq->setStep(1e6);
 	stop_freq->setStep(1e6);
@@ -415,6 +415,12 @@ SpectrumAnalyzer::~SpectrumAnalyzer()
 	}
 
 	delete api;
+	for (auto it = ch_api.begin(); it != ch_api.end(); ++it) {
+		delete *it;
+	}
+	for (auto it = marker_api.begin(); it != marker_api.end(); ++it) {
+		delete *it;
+	}
 
 	if (iio) {
 		bool started = iio->started();
@@ -487,7 +493,7 @@ void SpectrumAnalyzer::triggerRightMenuToggle(CustomPushButton *btn, bool checke
 
 void SpectrumAnalyzer::toggleRightMenu(CustomPushButton *btn, bool checked)
 {
-	int index;
+	int index = 0;
 	bool chSettings = false;
 	int id = -1;
 
@@ -514,8 +520,6 @@ void SpectrumAnalyzer::toggleRightMenu(CustomPushButton *btn, bool checked)
 		} else if (btn == ui->btnMarkers) {
 			index = 3;
 		}
-	} else {
-		index = 0;
 	}
 
 	if (id != -1) {
@@ -745,7 +749,7 @@ void SpectrumAnalyzer::on_comboBox_type_currentIndexChanged(const QString& s)
 	int crt_channel = channelIdOfOpenedSettings();
 
 	if (crt_channel < 0) {
-		qDebug() << "invalid channel ID for the opened Settings menu";
+		qDebug(CAT_SPECTRUM_ANALYZER) << "invalid channel ID for the opened Settings menu";
 		return;
 	}
 
@@ -770,7 +774,7 @@ void SpectrumAnalyzer::on_comboBox_window_currentIndexChanged(const QString& s)
 	int crt_channel = channelIdOfOpenedSettings();
 
 	if (crt_channel < 0) {
-		qDebug() << "invalid channel ID for the opened Settings menu";
+		qDebug(CAT_SPECTRUM_ANALYZER) << "invalid channel ID for the opened Settings menu";
 		return;
 	}
 
@@ -790,7 +794,7 @@ void SpectrumAnalyzer::on_spinBox_averaging_valueChanged(int n)
 	int crt_channel = channelIdOfOpenedSettings();
 
 	if (crt_channel < 0) {
-		qDebug() << "invalid channel ID for the opened Settings menu";
+		qDebug(CAT_SPECTRUM_ANALYZER) << "invalid channel ID for the opened Settings menu";
 		return;
 	}
 
@@ -896,18 +900,38 @@ void SpectrumAnalyzer::onChannelEnabled(bool en)
 
 	if (en) {
 		fft_plot->AttachCurve(cw->id());
+		if (!ui->btnMarkers->isEnabled()) {
+			ui->btnMarkers->blockSignals(true);
+			ui->btnMarkers->setEnabled(true);
+			ui->btnMarkers->blockSignals(false);
+		}
 	} else {
+		bool allDisabled = true;
 		for (int i = 0; i < channels.size(); i++) {
 			ChannelWidget *cw = channels[i]->widget();
 
 			if (cw->enableButton()->isChecked()) {
 				cw->nameButton()->setChecked(true);
+				allDisabled = false;
 				break;
 			}
 		}
-
+		if (allDisabled) {
+			ui->btnMarkers->blockSignals(true);
+			ui->btnMarkers->setChecked(false);
+			ui->btnMarkers->setDisabled(true);
+			ui->btnMarkers->blockSignals(false);
+			marker_menu_opened = false;
+		}
 		fft_plot->DetachCurve(cw->id());
 	}
+
+	for (int i = 0; i < fft_plot->markerCount(cw->id()); i++) {
+		if (fft_plot->markerEnabled(cw->id(), i)) {
+			fft_plot->setMarkerVisible(cw->id(), i, en);
+		}
+	}
+
 
 	fft_plot->replot();
 	updateRunButton(en);
@@ -938,6 +962,12 @@ void SpectrumAnalyzer::onStartStopChanged()
 	double stop = stop_freq->value();
 	double span = stop - start;
 	double center = start + (span / 2);
+
+	start_freq->setMaxValue(stop - 1);
+	stop_freq->setMinValue(start + 1);
+
+	start_freq->setValue(start);
+	stop_freq->setValue(stop);
 
 	if (start > stop) {
 		start = stop;

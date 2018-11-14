@@ -46,7 +46,7 @@ namespace adiscope {
 
 
 LogicAnalyzerChannel::LogicAnalyzerChannel(uint16_t id_,
-                std::string label_) :
+		const std::string &label_) :
 	Channel(id_,label_),
 	channel_role(nullptr),
 	trigger("none"),
@@ -441,7 +441,7 @@ void LogicAnalyzerChannelUI::rolesChangedLHS(const QString text)
 }
 
 void LogicAnalyzerChannelUI::setTrace(
-        std::shared_ptr<pv::view::LogicSignal> item)
+	std::shared_ptr<pv::view::LogicSignal> &item)
 {
 	trace = item;
 }
@@ -750,7 +750,7 @@ LogicAnalyzerChannelGroupUI::~LogicAnalyzerChannelGroupUI()
 	delete ui;
 }
 
-void LogicAnalyzerChannelGroupUI::set_decoder(std::string value)
+void LogicAnalyzerChannelGroupUI::set_decoder(const std::string &value)
 {
 //	static_cast<LogicAnalyzerChannelGroup *>(chg)->setDecoder(value);
 //	qDebug()<<QString().fromUtf8(lchg->getDecoder()->name);
@@ -852,7 +852,7 @@ std::shared_ptr<pv::binding::Decoder> LogicAnalyzerChannelGroupUI::getBinding()
 	return binding_;
 }
 
-void LogicAnalyzerChannelGroupUI::setBinding(std::shared_ptr<pv::binding::Decoder> bind)
+void LogicAnalyzerChannelGroupUI::setBinding(std::shared_ptr<pv::binding::Decoder> &bind)
 {
 	binding_ = bind;
 }
@@ -2016,6 +2016,9 @@ void LogicAnalyzerChannelManagerUI::setupGroupedChannel(LogicAnalyzerChannelGrou
 
 void LogicAnalyzerChannelManagerUI::update_ui()
 {
+	bool isRunning = la->isRunning();
+	if(isRunning)
+		la->startStop(false);
 	for (auto ch : chg_ui) {
 		ch->hide();
 		// prevent hovering after the channel is deleted
@@ -2093,6 +2096,8 @@ void LogicAnalyzerChannelManagerUI::update_ui()
 	if(!eventFilterGuard)
 		eventFilterGuard = new MouseWheelWidgetGuard(this);
 	eventFilterGuard->installEventRecursively(this);
+	if(isRunning)
+		la->startStop(true);
 }
 
 void LogicAnalyzerChannelManagerUI::remove_trace_clones()

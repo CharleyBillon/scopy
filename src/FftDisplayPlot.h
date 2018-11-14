@@ -21,6 +21,7 @@
 #define FFT_DISPLAY_PLOT_H
 
 #include "DisplayPlot.h"
+#include "spectrum_marker.hpp"
 #include <boost/shared_ptr.hpp>
 
 namespace adiscope {
@@ -79,8 +80,8 @@ namespace adiscope {
 		};
 
 	typedef boost::shared_ptr<SpectrumAverage> average_sptr;
-
 	private:
+		QList<QList<marker>> d_markers;
 		double* x_data;
 		std::vector<double*> y_data;
 		std::vector<double*> y_original_data;
@@ -91,6 +92,8 @@ namespace adiscope {
 		double d_stop_frequency;
 		double d_sampl_rate;
 		double d_preset_sampl_rate;
+
+		bool d_firstInit;
 
 		double m_sweepStart;
 		double m_sweepStop;
@@ -107,14 +110,14 @@ namespace adiscope {
 
 		MarkerController *d_mrkCtrl;
 		QList<int> d_num_markers;
-		QList<QList<marker>> d_markers;
+
 		QList<QList<std::shared_ptr<struct marker_data>>> d_peaks;
 		QList<QList<std::shared_ptr<struct marker_data>>> d_freq_asc_sorted_peaks;
 		bool d_emitNewMkrData;
 
 		QList<QColor> d_markerColors;
 
-		void plotData(const std::vector<double *> pts,
+		void plotData(const std::vector<double *> &pts,
 				uint64_t num_points);
 		void _resetXAxisPoints();
 
@@ -128,17 +131,17 @@ namespace adiscope {
 		void add_marker(int chn);
 		void remove_marker(int chn, int which);
 		void marker_set_pos_source(uint chIdx, uint mkIdx,
-			std::shared_ptr<struct marker_data> source_sptr);
+			std::shared_ptr<struct marker_data> &source_sptr);
 		void findPeaks(int chn);
 		void calculate_fixed_markers(int chn);
 		int getMarkerPos(const QList<marker>& marker_list,
-			 std::shared_ptr<SpectrumMarker> marker) const;
+			 std::shared_ptr<SpectrumMarker> &marker) const;
 		void detectMarkers();
 
 	private Q_SLOTS:
-		void onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker>);
-		void onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker>);
-		void onMrkCtrlMarkerReleased(std::shared_ptr<SpectrumMarker>);
+		void onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker> &);
+		void onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker> &);
+		void onMrkCtrlMarkerReleased(std::shared_ptr<SpectrumMarker> &);
 
 	public:
 		explicit FftDisplayPlot(int nplots, QWidget *parent = nullptr);
@@ -172,6 +175,9 @@ namespace adiscope {
 
 		bool markerEnabled(uint chIdx, uint mkIdx) const;
 		void setMarkerEnabled(uint chIdx, uint mkIdx, bool en);
+
+		bool markerVisible(uint chIdx, uint mkIdx) const;
+		void setMarkerVisible(uint chIdx, uint mkIdx, bool en);
 
 		double markerFrequency(uint chIdx, uint mkIdx) const;
 		double markerMagnitude(uint chIdx, uint mkIdx) const;

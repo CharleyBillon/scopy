@@ -16,7 +16,7 @@
 #  Boston, MA 02110-1301, USA.
 
 cmake_minimum_required(VERSION 3.1.3)
-project(scopy LANGUAGES CXX VERSION 1.0.1)
+project(scopy LANGUAGES CXX VERSION 1.0.2)
 
 # Get the GIT hash of the latest commit
 include(FindGit OPTIONAL)
@@ -267,6 +267,17 @@ if (NOT WIN32)
 endif()
 
 configure_file(Info.plist.cmakein ${CMAKE_CURRENT_BINARY_DIR}/Info.plist @ONLY)
+
+# Compiler options
+target_compile_options(${PROJECT_NAME} PUBLIC -Wall)
+
+#List of warnings to be treated as errors
+target_compile_options(${PROJECT_NAME} PUBLIC
+	-Werror=return-type
+	-Werror=uninitialized
+	-Werror=init-self
+	-Werror=switch
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
 		CXX_STANDARD 11

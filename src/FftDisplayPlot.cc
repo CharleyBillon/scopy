@@ -106,6 +106,8 @@ FftDisplayPlot::FftDisplayPlot(int nplots, QWidget *parent) :
 	d_numPoints = 1024;
 	x_data = new double[d_numPoints];
 
+	d_firstInit = true;
+
 	dBFormatter.setTwoDecimalMode(false);
 	freqFormatter.setTwoDecimalMode(true);
 
@@ -122,19 +124,19 @@ FftDisplayPlot::FftDisplayPlot(int nplots, QWidget *parent) :
 	d_mrkCtrl = new MarkerController(this);
 
 	connect(d_mrkCtrl,
-		SIGNAL(markerSelected(std::shared_ptr<SpectrumMarker>)),
+		SIGNAL(markerSelected(std::shared_ptr<SpectrumMarker>&)),
 		this,
-		SLOT(onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker>))
+		SLOT(onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker>&))
 	);
 	connect(d_mrkCtrl,
-		SIGNAL(markerPositionChanged(std::shared_ptr<SpectrumMarker>)),
+		SIGNAL(markerPositionChanged(std::shared_ptr<SpectrumMarker>&)),
 		this,
-		SLOT(onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker>))
+		SLOT(onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker>&))
 	);
 	connect(d_mrkCtrl,
-		SIGNAL(markerReleased(std::shared_ptr<SpectrumMarker>)),
+		SIGNAL(markerReleased(std::shared_ptr<SpectrumMarker>&)),
 		this,
-		SLOT(onMrkCtrlMarkerReleased(std::shared_ptr<SpectrumMarker>))
+		SLOT(onMrkCtrlMarkerReleased(std::shared_ptr<SpectrumMarker>&))
 	);
 
 
@@ -200,7 +202,7 @@ void FftDisplayPlot::setNumPoints(uint64_t num_points)
 	d_numPoints = num_points;
 }
 
-void FftDisplayPlot::plotData(const std::vector<double *> pts,
+void FftDisplayPlot::plotData(const std::vector<double *> &pts,
 		uint64_t num_points)
 {
 	uint64_t halfNumPoints = num_points / 2;
@@ -226,7 +228,8 @@ void FftDisplayPlot::plotData(const std::vector<double *> pts,
 	if (d_stop || halfNumPoints == 0)
 		return;
 
-	if (halfNumPoints != d_numPoints) {
+	if (halfNumPoints != d_numPoints || d_firstInit) {
+		d_firstInit = false;
 		d_numPoints = halfNumPoints;
 		numPointsChanged = true;
 
@@ -670,10 +673,11 @@ void FftDisplayPlot::remove_marker(int chn, int which)
 		d_markers[chn][which].ui->detach();
 		d_markers[chn].removeAt(which);
 	}
+
 }
 
 void FftDisplayPlot::marker_set_pos_source(uint chIdx, uint mkIdx,
-			std::shared_ptr<struct marker_data> source_sptr)
+			std::shared_ptr<struct marker_data> &source_sptr)
 {
 	d_markers[chIdx][mkIdx].data = source_sptr;
 	if (d_emitNewMkrData)
@@ -749,6 +753,37 @@ void FftDisplayPlot::setMarkerCount(uint chIdx, uint count)
 bool FftDisplayPlot::markerEnabled(uint chIdx, uint mkIdx) const
 {
 	return !!d_markers[chIdx][mkIdx].data;
+}
+
+
+bool FftDisplayPlot:: markerVisible(uint chIdx, uint mkIdx) const
+{
+	if (chIdx >= d_markers.size()) {
+		qDebug() << "Invalid channel index!";
+		return false;
+	}
+
+	if (mkIdx >= d_markers[chIdx].size()) {
+		qDebug() << "Invalid marker index";
+		return false;
+	}
+
+	return d_markers[chIdx][mkIdx].ui->isVisible();
+}
+
+void FftDisplayPlot::setMarkerVisible(uint chIdx, uint mkIdx, bool en)
+{
+	if (chIdx >= d_markers.size()) {
+		qDebug() << "Invalid channel index!";
+		return;
+	}
+
+	if (mkIdx >= d_markers[chIdx].size()) {
+		qDebug() << "Invalid marker index";
+		return;
+	}
+
+	d_markers[chIdx][mkIdx].ui->setVisible(en);
 }
 
 void FftDisplayPlot::setMarkerEnabled(uint chIdx, uint mkIdx, bool en)
@@ -960,7 +995,7 @@ void FftDisplayPlot::marker_to_next_lower_mag_peak(uint chIdx, uint mkIdx)
 }
 
 int FftDisplayPlot::getMarkerPos(const QList<marker>& marker_list,
-	std::shared_ptr<SpectrumMarker> marker) const
+	std::shared_ptr<SpectrumMarker> &marker) const
 {
 	int pos = -1;
 
@@ -976,7 +1011,7 @@ int FftDisplayPlot::getMarkerPos(const QList<marker>& marker_list,
 }
 
 void FftDisplayPlot::onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker>
-	marker)
+	&marker)
 {
 	for (uint i = 0; i < d_nplots; i++) {
 		for (uint j = 0; j < d_markers[i].size(); j++) {
@@ -990,8 +1025,7 @@ void FftDisplayPlot::onMrkCtrlMarkerSelected(std::shared_ptr<SpectrumMarker>
 	}
 }
 
-void FftDisplayPlot::onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker>
-	marker)
+void FftDisplayPlot::onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker> &marker)
 {
 	int markerPos = 0;
 	uint chn = -1;
@@ -1037,7 +1071,7 @@ void FftDisplayPlot::onMrkCtrlMarkerPosChanged(std::shared_ptr<SpectrumMarker>
 }
 
 void FftDisplayPlot::onMrkCtrlMarkerReleased(std::shared_ptr<SpectrumMarker>
-	marker)
+	&marker)
 {
 	int markerPos = -1;
 	uint chn = -1;
